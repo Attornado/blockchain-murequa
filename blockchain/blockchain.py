@@ -485,8 +485,14 @@ class Blockchain:
 
         # Choose the effective candidates
         chosen_candidates = self.__choose_candidates()
+
         # Choose an Asker candidate between them and remove it from the operator list
         asker_candidate = self.__choose_asker(chosen_candidates)
+
+        # If this is the first block after the genesis we must handle the validator selection different, choosing the
+        # asker as the winner of the validation right
+        if self.chain[-1]["validator"] is None:
+            return asker_candidate
 
         # Create the Asker (the 'formulating' or not the offer attribute is a random boolean, as described in the paper)
         asker: ng.Asker = ng.Asker(
