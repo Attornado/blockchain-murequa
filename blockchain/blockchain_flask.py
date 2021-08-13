@@ -57,7 +57,7 @@ def init_blockchain():
         random_gen = Crypto.Random.new().read
         private_key = RSA.generate(1024, random_gen)
     else:
-        private_key = RSA.importKeybinascii.unhexlify(private_key_string)
+        private_key = RSA.import_key(private_key_string).unhexlify(private_key_string)
     public_key = private_key.publickey()
     response = {
         'private_key': binascii.hexlify(private_key.exportKey(format='DER')).decode('ascii'),
