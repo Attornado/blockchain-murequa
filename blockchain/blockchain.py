@@ -462,8 +462,11 @@ class Blockchain:
             address=self.node_id
         )
 
-        # Insert the new candidates obtained from neighbours into our candidates
-        new_candidates = self.get_candidates_from_nodes()
+        # Insert the new candidates obtained from neighbours into our candidates, until we have at least 4 candidates
+        new_candidates = {}
+        while len(self.candidates) < REAL_CANDIDATES_NUMBER - 1:
+            new_candidates = self.get_candidates_from_nodes()
+
         for candidate_url in new_candidates:
             self.candidates.put(candidate_url, new_candidates[candidate_url])
 

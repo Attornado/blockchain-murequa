@@ -65,7 +65,7 @@
               <span>OR<br></span>
               <span>Insert an existing wallet private key to restore it</span>
             </p>
-            <input type="button" class="btn btn-primary btn-lg" value="Generate Wallet">
+            <input id="wallet_gen" type="button" class="btn btn-primary btn-lg" value="Generate Wallet">
           </div>
 
         </div>
@@ -77,7 +77,7 @@
     <div class="container">
 
         <div class="row">
-          <label id="public_key_label" class="col-sm-2">Public Key:</label>
+          <label for="public_key" id="public_key_label" class="col-sm-2">Public Key:</label>
           <div class="col-sm-10">
             <textarea id="public_key" rows="5" class="form-control" readonly></textarea>
           </div>
@@ -86,7 +86,7 @@
         <br>
         
         <div class="row">
-          <label class="col-sm-2">Private Key:</label>
+          <label for="private_key" class="col-sm-2">Private Key:</label>
           <div class="col-sm-10">
             <textarea id="private_key" rows="5" class="form-control"></textarea>
           </div>
@@ -108,27 +108,48 @@
 
     </div>
 
-
-
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-12 text-center">
+                <div class="card-body">
+                    <h4 class="card-title">Change node's port</h4>
+                    <p class="card-text">
+                        <span>Insert and click on the button below to change the node's port (default 5000)</span><br>
+                    </p>
+                    <div class="row">
+                        <label class="col-sm-2" for="port_form">Port:</label>
+                        <div class="col-sm-10">
+                            <input type="text" id="port_form" pattern="[1-9][0-9]*" placeholder="5000" class="form-control">
+                        </div>
+                    </div>
+                    <div style="margin-top: 5%">
+                        <input id="change_port" type="button" class="btn btn-primary btn-lg" value="Change node's port">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
     <!-- Bootstrap core JavaScript -->
     <script src="/static/vendor/jquery/jquery.min.js"></script>
     <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
+      var port = 5000;
       //Listener used when initialiting the blockchain
       initBlockchainListener = ev => {
         let getString = "", privateKeyString = $("#private_key").val();
         if (privateKeyString.length > 0)
           getString = "private_key=" + privateKeyString
         $.ajax({
-          url: 'http://127.0.0.1:5000/init_blockchain?' + getString, //local ip could be replaced with real ip
+          url: 'http://127.0.0.1:'+ port + '/init_blockchain?' + getString, //local ip should be replaced with real ip
           type: 'GET',
           crossDomain: true,
           dataType: 'jsonp',
           success: function(response){
-            document.getElementById("private_key").innerHTML = response['private_key'];
-            $("#private_key").readOnly = true;
+            let $privateKey =   $("#private_key");
+            $privateKey.val(response['private_key']);
+            $privateKey.attr("readonly", "readonly");
             document.getElementById("public_key").innerHTML = response['public_key'];
             document.getElementById("public_key").style.display = "block";
             document.getElementById("public_key_label").style.display = "block";
@@ -141,29 +162,50 @@
           }
         });
       };
-      //Listener used when the blockchain is already initialized
-      function changeListener(){
-        let $input = $('input');
-        $input.off("click", initBlockchainListener);
-        $input.on("click", ev => {
+      generateWalletListener = ev => {
           $.ajax({
-            url: '/wallet/new',
-            type: 'GET',
-            success: function(response){
-              document.getElementById("private_key").innerHTML = response['private_key'];
-              document.getElementById("public_key").innerHTML = response['public_key'];
-              document.getElementById("warning").style.display = "block";
-            },
-            error: function(error){
-              console.log(error);
-            }
+              url: '/wallet/new',
+              type: 'GET',
+              success: function(response) {
+                  $("#privateKey").val(response['private_key']);
+                  document.getElementById("public_key").innerHTML = response['public_key'];
+                  document.getElementById("warning").style.display = "block";
+              },
+              error: function(error){
+                  console.log(error);
+              }
           });
-        });
+      };
+      //Listener used when the blockchain is already initialized
+      function changeListener(reset = false){
+        let $input = $('#wallet_gen');
+        if(reset){
+            $input.off("click");
+            $input.on("click", initBlockchainListener);
+            document.getElementById("public_key").style.display = "none";
+            document.getElementById("public_key_label").style.display = "none";
+            document.getElementById("warning").style.display = "none";
+            $("#private_key").removeAttr("readonly");
+        }
+        else {
+            $input.off("click");
+            $input.on("click", generateWalletListener);
+        }
       }
 
       $(function(){
-        $('input').on("click", initBlockchainListener);
-      })
+        $('#wallet_gen').on("click", initBlockchainListener);
+        $('#change_port').on("click", ev => {
+            try {
+                port = parseInt($("#port_form").val());
+                $("#private_key").val("");
+                changeListener(true);
+            }
+            catch (e) {
+                alert("You must enter a valid integer!");
+            }
+        });
+      });
     </script>
   </body>
 </html>
