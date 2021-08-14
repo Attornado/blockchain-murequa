@@ -39,7 +39,7 @@ class Node(object):
     def reputation(self, reputation: float):
         if not 0 <= reputation <= MAX_REPUTATION:
             raise ValueError("Reputation must between 0 and " + str(MAX_REPUTATION) + "!")
-        self.__url = reputation
+        self.__reputation = reputation
 
     @reputation.deleter
     def reputation(self):
