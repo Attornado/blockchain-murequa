@@ -15,6 +15,8 @@ from Crypto.PublicKey import RSA
 from blockchain import Blockchain, MINING_SENDER, MINING_REWARD, REPUTATION_PENALTY, FALSE_SIGNATURE_GRAVITY, \
     VALIDATION_MERIT, INVALID_CHAIN_GRAVITY
 
+import node as nd
+
 # Instantiate the Node
 app = Flask(__name__)
 CORS(app)
@@ -26,6 +28,7 @@ blockchain: Optional[Blockchain] = None
 # JSONP decorator to support JSONP
 def support_jsonp(f):
     """Require user authorization"""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         callback = request.args.get('callback', False)
@@ -57,7 +60,7 @@ def init_blockchain():
         random_gen = Crypto.Random.new().read
         private_key = RSA.generate(1024, random_gen)
     else:
-        private_key = RSA.import_key(private_key_string).unhexlify(private_key_string)
+        private_key = RSA.importKey(binascii.unhexlify(private_key_string.encode()))
     public_key = private_key.publickey()
     response = {
         'private_key': binascii.hexlify(private_key.exportKey(format='DER')).decode('ascii'),
@@ -100,8 +103,8 @@ def broadcast_transaction():
             for node in blockchain.nodes:
                 print('http://' + node + '/transactions/new_pending')
                 try:
-                    response_broadcast = requests.get('http://' + node + '/transactions/new_pending')
-                except:
+                    response_broadcast = requests.get(node + '/transactions/new_pending')
+                except requests.exceptions.RequestException:
                     print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
 
@@ -138,8 +141,8 @@ def new_pending_transaction():
             for node in blockchain.nodes:
                 print('http://' + node + '/transactions/new_pending')
                 try:
-                    response_broadcast = requests.get('http://' + node + '/transactions/new_pending')
-                except:
+                    response_broadcast = requests.get(node + '/transactions/new_pending')
+                except requests.exceptions.RequestException:
                     print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
 
@@ -282,9 +285,10 @@ def broadcast_search_for_reputation():
                 for node_url in blockchain.nodes:
                     try:
                         resp = requests.get(
-                            'http://' + node_url + '/reputation/broadcast_research?' + 'node_url=' + node_url
-                            + '&request_id=' + request_id)
-                    except:
+                            node_url + '/reputation/broadcast_research',
+                            params={'node_url': node_url, 'request_id': request_id}
+                        )
+                    except requests.exceptions.RequestException:
                         print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
                         continue  # skip the current iteration if we can't connect with the node
                     reputation = resp.json()['reputation']
@@ -331,10 +335,10 @@ def change_reputation():
                 print('http://' + node_url + '/reputation/change_reputation')
                 try:
                     requests.get(
-                        'http://' + node_url + '/reputation/change_reputation?' + 'node_url=' + node_url +
-                        '&request_id=' + request_id
+                        node_url + '/reputation/change_reputation',
+                        params={'node_url': node_url, 'request_id': request_id}
                     )
-                except:
+                except requests.exceptions.RequestException:
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
 
@@ -389,8 +393,8 @@ def mine():
         for node_url in blockchain.nodes:
             print('http://' + node_url + '/nodes/resolve')
             try:
-                requests.get('http://' + node_url + '/resolve')
-            except:
+                requests.get(node_url + '/resolve')
+            except requests.exceptions.RequestException:
                 print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
         print("New chain broadcast completed successfully!")
 
@@ -398,8 +402,8 @@ def mine():
         for node_url in blockchain.nodes:
             print('http://' + node_url + '/nodes/resolve')
             try:
-                neighbour_chain = requests.get('http://' + node_url + '/chain').json()["chain"]
-            except:
+                neighbour_chain = requests.get(node_url + '/chain').json()["chain"]
+            except requests.exceptions.RequestException:
                 print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
                 continue  # skip the current iteration if we can't connect with the node
             validator_address = neighbour_chain[-1]["validator"]
@@ -430,6 +434,10 @@ def register_nodes():
         # Nodes will be passed as a ',' separated list, in which each element will be like '<node_url>-<node_address>'
         values = request.form
         node_strings = values.get('nodes').replace(" ", "").split(',')
+        new_node_flag: bool = False
+
+        if len(blockchain.nodes) == 0:
+            new_node_flag = True
 
         if node_strings is None:
             return "Error: Please supply a valid list of nodes", 400
@@ -437,6 +445,13 @@ def register_nodes():
         for node_string in node_strings:
             node_url, node_address = node_string.split('-')
             blockchain.register_node(node_url, node_address)
+
+        # If the node is a new node, we will need to re-research the first node's reputation, because his reputation has
+        # been set to 0 automatically
+        if new_node_flag:
+            node_url, node_address = node_strings[0].split('-')
+            first_node: nd.Node = blockchain.nodes[node_url]
+            first_node.reputation = blockchain.search_node_reputation(first_node.url)
 
         response = {
             'message': 'New nodes have been added',
@@ -459,8 +474,8 @@ def consensus():
             for node_url in blockchain.nodes:
                 print('http://' + node_url + '/nodes/resolve')
                 try:
-                    requests.get('http://' + node_url + '/resolve')
-                except:
+                    requests.get(node_url + '/resolve')
+                except requests.exceptions.RequestException:
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
             print("New chain broadcast completed successfully!")
 
