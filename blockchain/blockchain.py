@@ -129,7 +129,7 @@ class Blockchain:
                 break
 
         if reputation == -1:
-            request_id: str = str(self.node_id) + str(time()) + "RS"
+            self.reputation_requests[request_id] = request_id
             for neighbour_url in self.nodes:
                 try:
                     resp = requests.get(
@@ -169,6 +169,8 @@ class Blockchain:
         change_lvl: int = change_lvl
 
         if request_id not in self.reputation_requests:
+            
+            self.reputation_requests[request_id] = request_id
 
             if change_lvl <= 0:
                 return 'Wrong given gravity level', 400
