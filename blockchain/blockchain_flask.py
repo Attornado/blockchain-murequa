@@ -276,6 +276,9 @@ def broadcast_search_for_reputation():
         # the request in broadcast otherwise
         if request_id not in blockchain.reputation_requests:
 
+            # Add the request to the reputation_requests dictionary
+            blockchain.reputation_requests[request_id] = request_id
+
             # Return the node reputation if we find it in our neighbourhood
             if node_url in blockchain.nodes:
                 reputation = blockchain.nodes[node_url].reputation
@@ -318,6 +321,9 @@ def change_reputation():
         change_lvl: int = int(request.args.get('change_lvl'))
 
         if request_id not in blockchain.reputation_requests:
+
+            # Add the request to the reputation_requests dictionary
+            blockchain.reputation_requests[request_id] = request_id
 
             if not FALSE_SIGNATURE_GRAVITY <= change_lvl <= VALIDATION_MERIT:
                 return 'Wrong given change level', 400
