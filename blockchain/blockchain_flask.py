@@ -101,7 +101,7 @@ def broadcast_transaction():
 
         if transaction_added:
             for node in blockchain.nodes:
-                print('http://' + node + '/transactions/new_pending')
+                print(node + '/transactions/new_pending')
                 try:
                     response_broadcast = requests.get(node + '/transactions/new_pending')
                 except requests.exceptions.RequestException:
@@ -109,9 +109,9 @@ def broadcast_transaction():
                     continue  # skip the current iteration if we can't connect with the node
 
                 if response_broadcast.status_code == 200:
-                    print('http://' + node + '/transactions/new_pending completed successfully')
+                    print(node + '/transactions/new_pending completed successfully')
                 else:
-                    print('http://' + node + '/transactions/new_pending failed')
+                    print(node + '/transactions/new_pending failed')
 
         response = {'message': 'Transaction broadcast completed'}
         return jsonify(response), 200
@@ -139,7 +139,7 @@ def new_pending_transaction():
         # Send in broadcast to all neighbours
         if transaction_added:
             for node in blockchain.nodes:
-                print('http://' + node + '/transactions/new_pending')
+                print(node + '/transactions/new_pending')
                 try:
                     response_broadcast = requests.get(node + '/transactions/new_pending')
                 except requests.exceptions.RequestException:
@@ -147,9 +147,9 @@ def new_pending_transaction():
                     continue  # skip the current iteration if we can't connect with the node
 
                 if response_broadcast.status_code == 200:
-                    print('http://' + node + '/transactions/new_pending completed successfully')
+                    print(node + '/transactions/new_pending completed successfully')
                 else:
-                    print('http://' + node + '/transactions/new_pending failed')
+                    print(node + '/transactions/new_pending failed')
 
         response = {'message': 'Pending transaction added successfully!'}
         return jsonify(response), 200
@@ -332,7 +332,7 @@ def change_reputation():
 
             # Broadcast the message to all our neighbours
             for node_url in blockchain.nodes:
-                print('http://' + node_url + '/reputation/change_reputation')
+                print(node_url + '/reputation/change_reputation')
                 try:
                     requests.get(
                         node_url + '/reputation/change_reputation',
@@ -342,7 +342,7 @@ def change_reputation():
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
 
-                print('http://' + node_url + '/reputation/change_reputation completed successfully')
+                print(node_url + '/reputation/change_reputation completed successfully')
 
             success = True
             message = 'Node ' + node_address + ' reputation changed!'
@@ -391,7 +391,7 @@ def mine():
         # Broadcast the new chain
         print("Sending the new chain in broadcast...")
         for node_url in blockchain.nodes:
-            print('http://' + node_url + '/nodes/resolve')
+            print(node_url + '/nodes/resolve')
             try:
                 requests.get(node_url + '/resolve')
             except requests.exceptions.RequestException:
@@ -400,7 +400,7 @@ def mine():
 
         # Check if the validator of the last block is the same as the neighbour nodes
         for node_url in blockchain.nodes:
-            print('http://' + node_url + '/nodes/resolve')
+            print(node_url + '/nodes/resolve')
             try:
                 neighbour_chain = requests.get(node_url + '/chain').json()["chain"]
             except requests.exceptions.RequestException:
@@ -472,7 +472,7 @@ def consensus():
             # Broadcast the new chain
             print("Sending the new chain in broadcast...")
             for node_url in blockchain.nodes:
-                print('http://' + node_url + '/nodes/resolve')
+                print(node_url + '/nodes/resolve')
                 try:
                     requests.get(node_url + '/resolve')
                 except requests.exceptions.RequestException:

@@ -22,10 +22,7 @@ from collections import OrderedDict
 import binascii
 import random
 from typing import final, Optional
-from typing import List
 
-import Crypto
-import Crypto.Random
 from Crypto.Hash import SHA
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
@@ -34,7 +31,6 @@ import hashlib
 import json
 from time import time
 from urllib.parse import urlparse
-from uuid import uuid4
 from pytreemap import TreeMap
 import jsonpickle as jspkl
 
@@ -188,14 +184,14 @@ class Blockchain:
 
             # Broadcast the message to all our neighbours
             for node_url in self.nodes:
-                print('http://' + node_url + '/reputation/change_reputation')
+                print(node_url + '/reputation/change_reputation')
                 try:
                     requests.get(
                         node_url + '/reputation/change_reputation',
                         params={'node_url': node_url, 'request_id': request_id}
                     )
 
-                    print('http://' + node_url + '/reputation/change_reputation completed successfully')
+                    print(node_url + '/reputation/change_reputation completed successfully')
                 except requests.exceptions.RequestException:
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
 
@@ -368,7 +364,7 @@ class Blockchain:
 
         # Grab and verify the chains from all the nodes in our network
         for node_url in neighbours:
-            print('http://' + node_url + '/chain')
+            print(node_url + '/chain')
             try:
                 response = requests.get(node_url + '/chain')
             except requests.exceptions.RequestException:
@@ -415,7 +411,7 @@ class Blockchain:
         # in other words, if their balance + the base reward from COINBASE is higher than the previous block cost
         for node in neighbours:
             if neighbours[node].reputation >= MINIMUM_REPUTATION:
-                print('Requesting http://' + node + '/candidates')
+                print('Requesting ' + node + '/candidates')
                 try:
                     response = requests.get(node + '/candidates')
                 except requests.exceptions.RequestException:
@@ -517,7 +513,7 @@ class Blockchain:
         )
 
         # Create the operators
-        operators = List[ng.NegotiationActor]
+        operators = []
         # As for now, the operator offer will be minimum plus a small random float
         for candidate_url in self.candidates:
             operator = ng.NegotiationActor(
