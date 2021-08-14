@@ -74,7 +74,6 @@ class Blockchain:
         self.addresses = {}  # blockchainAddress->url mapping of our node's neighbours in the blockchain network
         self.reputation_requests = OrderedDict()  # Reputation-related requests, to avoid infinite broadcast loops-
 
-
         # TODO: replace with the node blockchain address
         self.node_id = public_key  # Main blockchain address of the node
 
@@ -96,7 +95,7 @@ class Blockchain:
 
             # If the node is already our neighbour but has changed url, update it, otherwise calculate his reputation.
             if node_address not in self.addresses:
-                node_reputation: float = self.__search_node_reputation(node_url)
+                node_reputation: float = self.search_node_reputation(node_url)
             else:
                 node_reputation: float = self.nodes[self.addresses[node_address]].reputation
                 del self.nodes[self.addresses[node_address]]
@@ -107,7 +106,7 @@ class Blockchain:
         else:
             raise ValueError('Invalid URL')
 
-    def __search_node_reputation(self, node_url) -> float:
+    def search_node_reputation(self, node_url) -> float:
         """
         Returns the reputation of the node with the given url, asking it to our neighbours, and broadcasting the request
         if they don't know it.
@@ -121,27 +120,33 @@ class Blockchain:
 
         for neighbour_url in self.nodes:
             try:
-                resp = requests.get('http://' + neighbour_url + '/reputation/neighbourhood_research?' + 'node_url='
-                                    + node_url)
+                resp = requests.get(
+                    neighbour_url + '/reputation/neighbourhood_research',
+                    params={'node_url': node_url, 'request_id': request_id}
+                )
                 reputation = resp.json()['reputation']
-            except:
+            except requests.exceptions.RequestException:
                 print("Node with url '" + neighbour_url + "' isn't connected or doesn't exist anymore.")
 
             # Stop the broadcasting if we find the reputation
             if reputation != -1:
                 break
 
-        for neighbour_url in self.nodes:
-            try:
-                resp = requests.get('http://' + neighbour_url + '/reputation/broadcast_research?' + 'node_url=' + node_url
-                                    + '&request_id=' + request_id)
-                reputation = resp.json()['reputation']
-            except:
-                print("Node with url '" + neighbour_url + "' isn't connected or doesn't exist anymore.")
+        if reputation == -1:
+            request_id: str = str(self.node_id) + str(time()) + "RS"
+            for neighbour_url in self.nodes:
+                try:
+                    resp = requests.get(
+                        neighbour_url + '/reputation/broadcast_research',
+                        params={'node_url': node_url, 'request_id': request_id}
+                    )
+                    reputation = resp.json()['reputation']
+                except requests.exceptions.RequestException:
+                    print("Node with url '" + neighbour_url + "' isn't connected or doesn't exist anymore.")
 
-            # Stop the broadcasting if we find the reputation
-            if reputation != -1:
-                break
+                # Stop the broadcasting if we find the reputation
+                if reputation != -1:
+                    break
 
         # If the node is not found (reputation is -1), then it either doesn't exist, or it's a node new to the network,
         # so we set his reputation to 1, the default value
@@ -155,7 +160,7 @@ class Blockchain:
         them of the wrong or correct behaviour of the address, if no_broadcast_flag is false.
         The new reputation r', given the old reputation r, is calculated by the following formula:
         r' = r + change_lvl.
-        The request id generated will be in the format: <node_address><timestamp>RD.
+        The request id generated will be in the format: <node_address><timestamp>RC.
 
         :param node_address: the address of the node to change the reputation
         :param change_lvl: the level of the reputation change (may be positive or negative depending on the behaviour)
@@ -176,7 +181,7 @@ class Blockchain:
             if node_address in self.addresses:
                 node_url = self.addresses[node_address]
 
-                if self.nodes[node_url].reputation - change_lvl*REPUTATION_PENALTY >= 0:
+                if self.nodes[node_url].reputation - change_lvl * REPUTATION_PENALTY >= 0:
                     self.nodes[node_url].reputation -= change_lvl * REPUTATION_PENALTY
                 else:
                     self.nodes[node_url].reputation = 0
@@ -186,12 +191,12 @@ class Blockchain:
                 print('http://' + node_url + '/reputation/change_reputation')
                 try:
                     requests.get(
-                        'http://' + node_url + '/reputation/change_reputation?' + 'node_url=' + node_url + '&request_id='
-                        + request_id
+                        node_url + '/reputation/change_reputation',
+                        params={'node_url': node_url, 'request_id': request_id}
                     )
 
                     print('http://' + node_url + '/reputation/change_reputation completed successfully')
-                except:
+                except requests.exceptions.RequestException:
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
 
     def get_node_balance(self, node_address) -> float:
@@ -365,8 +370,8 @@ class Blockchain:
         for node_url in neighbours:
             print('http://' + node_url + '/chain')
             try:
-                response = requests.get('http://' + node_url + '/chain')
-            except:
+                response = requests.get(node_url + '/chain')
+            except requests.exceptions.RequestException:
                 print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
                 continue  # Skip the current iteration if we can't connect with the node
 
@@ -412,8 +417,8 @@ class Blockchain:
             if neighbours[node].reputation >= MINIMUM_REPUTATION:
                 print('Requesting http://' + node + '/candidates')
                 try:
-                    response = requests.get('http://' + node + '/candidates')
-                except:
+                    response = requests.get(node + '/candidates')
+                except requests.exceptions.RequestException:
                     print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
 
@@ -472,10 +477,10 @@ class Blockchain:
 
         # TOCHECK: force the neighbours to update their candidates
         for node in self.nodes:
-            print('Requesting http://' + node + '/update_candidates')
+            print('Requesting' + node + '/update_candidates')
             try:
-                requests.get('http://' + node + '/update_candidates')
-            except:
+                requests.get(node + '/update_candidates')
+            except requests.exceptions.RequestException:
                 print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
 
         # If present, remove the validator of the last block from the candidates
@@ -557,4 +562,3 @@ class Blockchain:
     def __choose_asker(self, chosen_candidates):
         # TODO: develop more complex algorithm for choosing the asker
         return chosen_candidates[0]
-
