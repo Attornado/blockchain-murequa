@@ -276,7 +276,8 @@ def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
         negotiation_price = low_attractor_price(b.proposal, low_mean, a.offer)
         if a.formulating and b.acceptance:
             # a vince la negoziazione
-            a.offer = negotiation_price
+            if a.balance >= negotiation_price:
+                a.offer = negotiation_price
             winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
@@ -290,7 +291,8 @@ def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
         negotiation_price = high_attractor_price(b.proposal, up_mean, a.offer)
         if a.formulating and b.acceptance:
             # a vince la negoziazione
-            a.offer = negotiation_price
+            if a.balance >= negotiation_price:
+                a.offer = negotiation_price
             winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
@@ -306,7 +308,8 @@ def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
         negotiation_price = central_attractor_price(b.proposal, a.offer, best_offerer)
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari al negotiation_price
-            a.offer = negotiation_price
+            if a.balance >= negotiation_price:
+                a.offer = negotiation_price
             winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
@@ -321,13 +324,15 @@ def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari a price
-            a.offer = negotiation_price
+            if a.balance >= negotiation_price:
+                a.offer = negotiation_price
             winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più alta
             winner = best_offerer
-            winner.offer = negotiation_price
+            if winner.balance >= negotiation_price:
+                winner.offer = negotiation_price
             transaction(winner, b, amount=negotiation_price)
         elif not b.acceptance:
             success = False
@@ -337,13 +342,15 @@ def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari a price
-            a.offer = negotiation_price
+            if a.balance >= negotiation_price:
+                a.offer = negotiation_price
             winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più alta
             winner = best_offerer
-            winner.offer = negotiation_price
+            if winner.balance >= negotiation_price:
+                winner.offer = negotiation_price
             transaction(winner, b, amount=negotiation_price)
         elif not b.acceptance:
             success = False
@@ -353,7 +360,8 @@ def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari a price
-            a.offer = negotiation_price
+            if a.balance >= negotiation_price:
+                a.offer = negotiation_price
             winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
