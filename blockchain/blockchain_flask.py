@@ -342,7 +342,7 @@ def change_reputation():
                 try:
                     requests.get(
                         node_url + '/reputation/change_reputation',
-                        params={'node_url': node_url, 'request_id': request_id}
+                        params={'node_url': node_url, 'request_id': request_id, 'change_lvl': change_lvl}
                     )
                 except requests.exceptions.RequestException:
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
@@ -378,11 +378,11 @@ def mine():
         last_block = blockchain.chain[-1]
 
         # Candidate to the negotiation and execute the negotiation algorithm
-        winner = blockchain.proof_of_negotiation()
+        winner, negotiation_price = blockchain.proof_of_negotiation()
 
         # If we won the negotiation, then start validating the block
         if winner.address != blockchain.node_id:
-            return
+            return jsonify({"winner": winner.url, "won": False}), 200
 
         # We must receive a reward for winning the reputation.
         blockchain.submit_transaction(
@@ -392,21 +392,25 @@ def mine():
 
         # Forge the new Block by adding it to the chain
         previous_hash = blockchain.hash(last_block)
-        block = blockchain.create_block(previous_hash, blockchain.node_id)
+        block = blockchain.create_block(
+            previous_hash=previous_hash,
+            validator_address=blockchain.node_id,
+            negotiation_price=negotiation_price
+        )
 
         # Broadcast the new chain
         print("Sending the new chain in broadcast...")
         for node_url in blockchain.nodes:
             print(node_url + '/nodes/resolve')
             try:
-                requests.get(node_url + '/resolve')
+                requests.get(node_url + '/nodes/resolve')
             except requests.exceptions.RequestException:
                 print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
         print("New chain broadcast completed successfully!")
 
         # Check if the validator of the last block is the same as the neighbour nodes
         for node_url in blockchain.nodes:
-            print(node_url + '/nodes/resolve')
+            print(node_url + '/chain')
             try:
                 neighbour_chain = requests.get(node_url + '/chain').json()["chain"]
             except requests.exceptions.RequestException:
@@ -480,7 +484,7 @@ def consensus():
             for node_url in blockchain.nodes:
                 print(node_url + '/nodes/resolve')
                 try:
-                    requests.get(node_url + '/resolve')
+                    requests.get(node_url + '/nodes/resolve')
                 except requests.exceptions.RequestException:
                     print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
             print("New chain broadcast completed successfully!")

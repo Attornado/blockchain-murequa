@@ -29,6 +29,7 @@ from Crypto.Signature import PKCS1_v1_5
 
 import hashlib
 import json
+import time as tm
 from time import time
 from urllib.parse import urlparse
 from pytreemap import TreeMap
@@ -56,7 +57,7 @@ MIN_GAIN: final = 0.5
 MAX_GAIN: final = 2
 MIN_OPERATOR: final = 0
 MAX_OPERATOR: final = 1
-
+SYNC_TIME: final = 1.0
 
 class Blockchain:
 
@@ -66,15 +67,19 @@ class Blockchain:
         self.transactions: list = []  # Transactions to be added to the next block, already verified
         self.candidates: TreeMap = TreeMap()  # Validator candidates for the negotiation
         self.chain: list = []  # The chain of validated blocks
-        self.nodes = {}  # url->Node mapping neighbours of our node in the blockchain network
-        self.addresses = {}  # blockchainAddress->url mapping of our node's neighbours in the blockchain network
-        self.reputation_requests = OrderedDict()  # Reputation-related requests, to avoid infinite broadcast loops-
+        self.nodes: dict = {}  # url->Node mapping neighbours of our node in the blockchain network
+        self.addresses: dict = {}  # blockchainAddress->url mapping of our node's neighbours in the blockchain network
+        self.reputation_requests = OrderedDict()  # Reputation-related requests, to avoid infinite broadcast loops
+        self.pending_winner: dict = {
+            "validator": None,  # Last block validator address, used in verifications
+            "block_number": 0
+        }
 
         # TODO: replace with the node blockchain address
         self.node_id = public_key  # Main blockchain address of the node
 
         # Create genesis block
-        self.create_block(previous_hash='00', validator_address=None, negotiation_price=None)
+        self.create_block(previous_hash='00', validator_address=None, negotiation_price=0)
 
     def register_node(self, node_url, node_address):
         """blockchain.py
@@ -169,7 +174,7 @@ class Blockchain:
         change_lvl: int = change_lvl
 
         if request_id not in self.reputation_requests:
-            
+
             self.reputation_requests[request_id] = request_id
 
             if change_lvl <= 0:
@@ -179,34 +184,48 @@ class Blockchain:
             if node_address in self.addresses:
                 node_url = self.addresses[node_address]
 
-                if self.nodes[node_url].reputation - change_lvl * REPUTATION_PENALTY >= 0:
-                    self.nodes[node_url].reputation -= change_lvl * REPUTATION_PENALTY
+                if self.nodes[node_url].reputation + change_lvl * REPUTATION_PENALTY >= 0:
+                    self.nodes[node_url].reputation += change_lvl * REPUTATION_PENALTY
                 else:
                     self.nodes[node_url].reputation = 0
 
-            # Broadcast the message to all our neighbours
-            for node_url in self.nodes:
-                print(node_url + '/reputation/change_reputation')
-                try:
-                    requests.get(
-                        node_url + '/reputation/change_reputation',
-                        params={'node_url': node_url, 'request_id': request_id}
-                    )
+            if not no_broadcast_flag:
+                # Broadcast the message to all our neighbours
+                for node_url in self.nodes:
+                    print(node_url + '/reputation/change_reputation')
+                    try:
+                        requests.get(
+                            node_url + '/reputation/change_reputation',
+                            params={'node_url': node_url, 'request_id': request_id, 'change_lvl': change_lvl}
+                        )
 
-                    print(node_url + '/reputation/change_reputation completed successfully')
-                except requests.exceptions.RequestException:
-                    print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
+                        print(node_url + '/reputation/change_reputation completed successfully')
+                    except requests.exceptions.RequestException:
+                        print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
 
     def get_node_balance(self, node_address) -> float:
         """
-        Returns the balance of the node with the given url.
+        Returns the balance of the node with the given url, by using the blockchain transaction history.
+        As for negotiation winner rewards (aka block validators), there are both an explicit transaction from the
+        COINBASE for the basic mining reward, and an implicit transaction from the winner to the last block validator.
 
         :param node_address: the blockchain address of the node to calculate the balance
         :return: the balance of the node
         """
         # This will be implemented with Merkel Trees in the future
         balance = 0
+        last_validator = None
         for block in self.chain:
+
+            # Implicit transaction to the previous block validator from the new negotiation winner
+            if block["validator"] is not None and last_validator is not None:
+                if node_address == last_validator:
+                    balance += block["negotiation_price"]
+                elif node_address == block["validator"]:
+                    balance -= block["negotiation_price"]
+                last_validator = block["validator"]
+
+            # Explicit transactions calculations
             transactions = block["transactions"]
             for transaction in transactions:
                 if transaction['recipient_address'] == node_address:
@@ -297,6 +316,7 @@ class Blockchain:
             )
 
         # Forge the new block with the valid transactions
+        # TODO: add private key signature here
         block = {'block_number': len(self.chain) + 1,
                  'timestamp': time(),
                  'transactions': self.transactions,
@@ -304,7 +324,7 @@ class Blockchain:
                  'validator': validator_address,  # address of the validator
                  'negotiation_price': negotiation_price,  # the selling price of the validation right
                  'previous_hash': previous_hash
-                 }
+        }
 
         # Reset the current list of transactions
         self.transactions = []
@@ -384,6 +404,13 @@ class Blockchain:
                 if not valid_chain_flag:
                     self.change_reputation(self.nodes[node_url].address, INVALID_CHAIN_GRAVITY)
 
+                # If we took part in the last negotiation, check if the validator is the same who won it
+                if len(chain) == self.pending_winner["block_number"]:
+                    # TODO: add validator signature check here
+                    # If the validator is not the same, diminish the reputation of the sender node
+                    if self.pending_winner["validator"] != chain[-1]["validator"]:
+                        self.change_reputation(self.nodes[node_url].address, FALSE_SIGNATURE_GRAVITY)
+
                 if length > max_length and valid_chain_flag:
                     max_length = length
                     new_chain = chain
@@ -394,6 +421,7 @@ class Blockchain:
         if new_chain:
             self.chain = new_chain
             validator_address = self.chain[-1]["validator"]
+            self.candidates = TreeMap()  # Delete all current candidates if they exist
             self.change_reputation(
                 node_address=validator_address,
                 change_lvl=VALIDATION_MERIT,
@@ -411,13 +439,13 @@ class Blockchain:
         # For each node, send request to get the candidate list from the node and add it to the dictionary,
         # if their reputation is higher than the minimum, and if their balance is higher than the minimum,
         # in other words, if their balance + the base reward from COINBASE is higher than the previous block cost
-        for node in neighbours:
-            if neighbours[node].reputation >= MINIMUM_REPUTATION:
-                print('Requesting ' + node + '/candidates')
+        for node_url in neighbours:
+            if neighbours[node_url].reputation >= MINIMUM_REPUTATION:
+                print('Requesting ' + node_url + '/candidates')
                 try:
-                    response = requests.get(node + '/candidates')
+                    response = requests.get(node_url + '/candidates')
                 except requests.exceptions.RequestException:
-                    print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
+                    print("Node with url '" + node_url + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
 
                 # Pick the candidates from the response
@@ -425,12 +453,9 @@ class Blockchain:
 
                 # Check if the candidate map contains MYSELF_STRING, and replace it with the ip of the sender
                 try:
-                    sender_account = resp_candidates["myself"]
-                    new_candidates[node] = sender_account
-                    # Overwrite their reputation/address to prevent false addresses/reputations (trolling/scam)
-                    resp_candidates[node].reputation = self.nodes[node].reputation
-                    resp_candidates[node].address = self.nodes[node].address
-                    del resp_candidates["myself"]
+                    sender_node_string = resp_candidates[nd.MYSELF_STRING]
+                    resp_candidates[node_url] = sender_node_string
+                    del resp_candidates[nd.MYSELF_STRING]
                 except KeyError:
                     pass
 
@@ -438,6 +463,11 @@ class Blockchain:
                 for candidate_url in resp_candidates:
                     # De-jsonify the candidate to get the Node instance associated with the candidate
                     candidate: nd.Node = jspkl.loads(resp_candidates[candidate_url])
+                    if candidate_url in self.nodes:
+                        # Overwrite their reputation/address to prevent false addresses/reputations (trolling/scam)
+                        candidate.reputation = self.nodes[candidate_url].reputation
+                        candidate.address = self.nodes[candidate_url].address
+                        candidate.url = self.nodes[candidate_url].url
 
                     # Select the candidate only if their balance is enough (last block cost + MINING_REWARD)
                     if self.get_node_balance(candidate.address) + MINING_REWARD > self.chain[-1]["negotiation_price"]:
@@ -445,7 +475,16 @@ class Blockchain:
 
         return new_candidates
 
-    def proof_of_negotiation(self) -> nd.Node:
+    def proof_of_negotiation(self) -> (nd.Node, float):
+        """
+        Candidates the current node to the negotiation prior to become the next block validator by:
+         1. Getting an authoritative blockchain and synchronizing the candidates from the other nodes;
+         2. Choosing the effective negotiation participants and the asker candidate;
+         3. Executing the negotiation, calculating the price to pay to the previous block validator;
+         4. Returning the winner and the negotiation price;
+
+        :return: The winner node and the negotiation price payed by it to get the validation right.
+        """
         print("Getting valid chain...")
         if self.resolve_conflicts():
             print('Our chain was replaced.')
@@ -467,11 +506,10 @@ class Blockchain:
 
         # Insert the new candidates obtained from neighbours into our candidates, until we have at least 4 candidates
         new_candidates = {}
-        while len(self.candidates) < REAL_CANDIDATES_NUMBER - 1:
+        while len(self.candidates) - 1 < REAL_CANDIDATES_NUMBER:
             new_candidates = self.get_candidates_from_nodes()
-
-        for candidate_url in new_candidates:
-            self.candidates.put(candidate_url, new_candidates[candidate_url])
+            for candidate_url in new_candidates:
+                self.candidates.put(candidate_url, new_candidates[candidate_url])
 
         # TOCHECK: force the neighbours to update their candidates
         for node in self.nodes:
@@ -481,10 +519,19 @@ class Blockchain:
             except requests.exceptions.RequestException:
                 print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
 
+        # Wait some time to make sure all nodes received the message and update candidates one last time
+        tm.sleep(SYNC_TIME)
+        new_candidates = self.get_candidates_from_nodes()
+        for candidate_url in new_candidates:
+            self.candidates.put(candidate_url, new_candidates[candidate_url])
+
         # If present, remove the validator of the last block from the candidates
         for candidate_url in self.candidates:
             if self.candidates[candidate_url].address == self.chain[-1]["validator"]:
                 del self.candidates[candidate_url]
+
+        # Delete MYSELF_STRING candidate from the candidates, neighbours will add ourself to the candidates
+        del self.candidates[nd.MYSELF_STRING]
 
         # Choose the effective candidates
         chosen_candidates = self.__choose_candidates()
@@ -495,7 +542,8 @@ class Blockchain:
         # If this is the first block after the genesis we must handle the validator selection different, choosing the
         # asker as the winner of the validation right
         if self.chain[-1]["validator"] is None:
-            return asker_candidate
+            self.candidates = TreeMap()
+            return asker_candidate, 0
 
         # Create the Asker (the 'formulating' or not the offer attribute is a random boolean, as described in the paper)
         asker: ng.Asker = ng.Asker(
@@ -503,13 +551,13 @@ class Blockchain:
             balance=self.get_node_balance(asker_candidate.url),
             formulating=bool(random.randint(0, 1))
         )
-        asker.offer = asker.generate_offer(minimum=abs(self.chain[-1]['negotiation_price'] - MINING_REWARD))
+        asker.offer = asker.generate_offer(minimum=max(self.chain[-1]['negotiation_price'] - MINING_REWARD, 0))
 
         # Create the Bidder (the 'acceptance' attribute is True regardless of all, as described in the paper)
         # The proposed price from the bidder will be, as for now, the base plus a random float value between some bounds
         bidder: ng.Bidder = ng.Bidder(
             identifier=self.chain[-1]["validator"],
-            offer=random.uniform(MIN_GAIN, MAX_GAIN),
+            proposal=random.uniform(MIN_GAIN, MAX_GAIN),
             balance=self.get_node_balance(self.chain[-1]["validator"]),
             acceptance=True
         )
@@ -518,15 +566,17 @@ class Blockchain:
         operators = []
         # As for now, the operator offer will be minimum plus a small random float
         for candidate_url in self.candidates:
-            operator = ng.NegotiationActor(
+            balance = self.get_node_balance(self.candidates[candidate_url].url)
+            operator = ng.Buyer(
                 identifier=self.candidates[candidate_url].address,
-                offer=random.uniform(MIN_OPERATOR, MAX_OPERATOR),
-                balance=self.get_node_balance(self.candidates[candidate_url].url)
+                offer=min(balance, random.uniform(MIN_OPERATOR, MAX_OPERATOR)),
+                balance=balance
             )
             operators.append(operator)
 
         # Get a winner using the negotiation algorithm, and the corresponding Node object
         success, winner_actor = ng.negotiation(asker, bidder, *operators)
+        negotiation_price: float = winner_actor.offer
         winner: Optional[nd.Node] = None
         for candidate_url in self.candidates:
             if self.candidates[candidate_url].address == winner_actor.identifier:
@@ -534,19 +584,22 @@ class Blockchain:
 
         # Empty the candidate dictionary
         self.candidates = TreeMap()
-        # Return the validator
-        return winner
 
-    def __choose_candidates(self) -> dict:
+        # Set the pending validator attribute and return the validator, negotiation_price couple
+        self.pending_winner["validator"] = winner.address
+        self.pending_winner["block_number"] = len(self.chain) + 1
+        return winner, negotiation_price
+
+    def __choose_candidates(self) -> OrderedDict:
         # Select the effective candidates, by a reputation-weighted roulette wheel algorithm
         # In the future, the candidates will be chosen from different coin age groups, to grant democracy
 
         candidate_keys = list(self.candidates.key_set())  # Candidate keys
-        candidate_weights = [self.candidates[candidate]["reputation"] for candidate in candidate_keys]  # Reputations
+        candidate_weights = [self.candidates[candidate].reputation for candidate in candidate_keys]  # Reputations
         candidates_num = [i for i in range(0, len(candidate_keys))]  # Indexes of the candidates
         chosen_candidates = OrderedDict()  # Chosen candidates dictionary
 
-        for i in range(0, REAL_CANDIDATES_NUMBER + 1):
+        for i in range(0, min(REAL_CANDIDATES_NUMBER + 1, len(self.candidates))):
             # Pick the candidate index
             selected_index = random.choices(population=candidates_num, weights=candidate_weights, k=1)[0]
             # To prevent selection of the same candidate twice, set his weight to 0
@@ -557,6 +610,7 @@ class Blockchain:
 
         return chosen_candidates
 
-    def __choose_asker(self, chosen_candidates):
+    def __choose_asker(self, chosen_candidates: OrderedDict) -> nd.Node:
         # TODO: develop more complex algorithm for choosing the asker
-        return chosen_candidates[0]
+        chosen_candidates_list = list(chosen_candidates)
+        return self.candidates[chosen_candidates_list[0]]
