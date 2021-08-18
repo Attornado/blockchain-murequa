@@ -542,6 +542,9 @@ class Blockchain:
         # If this is the first block after the genesis we must handle the validator selection different, choosing the
         # asker as the winner of the validation right
         if self.chain[-1]["validator"] is None:
+            # Set the pending validator attribute and return the validator, negotiation_price couple
+            self.pending_winner["validator"] = asker_candidate.address
+            self.pending_winner["block_number"] = len(self.chain) + 1
             self.candidates = TreeMap()
             return asker_candidate, 0
 
