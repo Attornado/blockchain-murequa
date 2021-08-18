@@ -56,3 +56,6 @@ class Node(object):
     @address.deleter
     def address(self):
         raise AttributeError("The 'address' attribute cannot be deleted!")
+
+    def __str__(self):
+        return f"Node[url: {self.url}, address: {self.address}, reputation: {self.reputation}]"

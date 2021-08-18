@@ -36,19 +36,16 @@ EQUILIBRIUM: final = {
 }
 
 
-class NegotiationActor:
-    def __init__(self, identifier: str = "", offer: float = 0, balance: float = 0):
-        if offer < 0 or balance < 0:
-            raise ValueError("Balance and offer cannot be negative")
-        if offer > balance:
-            raise ValueError("Balance cannot be greater than offer")
+class NegotiationActor(object):
+    def __init__(self, identifier: str = "", balance: float = 0):
+        if balance < 0:
+            raise ValueError("Balance cannot be negative!")
         self.__identifier = identifier
-        self.__offer = offer
         self.__balance = balance
 
     @property
-    def identifier(self) -> float:
-        return self.__balance
+    def identifier(self) -> str:
+        return self.__identifier
 
     @identifier.setter
     def identifier(self, identifier: str):
@@ -72,6 +69,16 @@ class NegotiationActor:
     def balance(self):
         raise AttributeError("Balance attribute cannot be deleted!")
 
+
+class Buyer(NegotiationActor):
+    def __init__(self, identifier: str = "", offer: float = 0, balance: float = 0):
+        super(Buyer, self).__init__(identifier=identifier, balance=balance)
+        if offer < 0:
+            raise ValueError("Offer cannot be negative!")
+        if offer > balance:
+            raise ValueError("Offer cannot be lesser than balance!")
+        self.__offer = offer
+
     @property
     def offer(self) -> float:
         return self.__offer
@@ -80,8 +87,6 @@ class NegotiationActor:
     def offer(self, offer: float):
         if offer < 0:
             raise ValueError("Offer cannot be negative!")
-        if offer > self.balance:
-            raise ValueError("Balance cannot be smaller than offer!")
         self.__offer = offer
 
     @offer.deleter
@@ -90,9 +95,22 @@ class NegotiationActor:
 
 
 class Bidder(NegotiationActor):
-    def __init__(self, identifier: str = "", offer: float = 0, balance: float = 0, acceptance: bool = False):
-        super(Bidder, self).__init__(identifier=identifier, offer=offer, balance=balance)
+    def __init__(self, identifier: str = "", proposal: float = 0, balance: float = 0, acceptance: bool = False):
+        super(Bidder, self).__init__(identifier=identifier, balance=balance)
         self.__acceptance = acceptance
+        self.__proposal = proposal
+
+    @property
+    def proposal(self) -> float:
+        return self.__proposal
+
+    @proposal.setter
+    def proposal(self, proposal: float):
+        self.__proposal = proposal
+
+    @proposal.deleter
+    def proposal(self):
+        raise AttributeError("Proposal attribute cannot be deleted!")
 
     @property
     def acceptance(self) -> bool:
@@ -107,7 +125,7 @@ class Bidder(NegotiationActor):
         raise AttributeError("Acceptance attribute cannot be deleted!")
 
 
-class Asker(NegotiationActor):
+class Asker(Buyer):
     def __init__(self, identifier: str = "", offer: float = 0, balance: float = 0, formulating: bool = False):
         super(Asker, self).__init__(identifier=identifier, offer=offer, balance=balance)
         self.__formulating = formulating
@@ -126,7 +144,7 @@ class Asker(NegotiationActor):
 
     def generate_offer(self, minimum: float) -> float:
         # TODO: implement more complex algorithm for formulating the offer
-        return max(self.balance, minimum)
+        return min(self.balance, minimum)
 
 
 class NotEnoughOperatorsError(Exception):
@@ -136,14 +154,14 @@ class NotEnoughOperatorsError(Exception):
 
 
 def transaction(buyer: NegotiationActor, seller: NegotiationActor, amount: float):
-    if amount <= 0:
-        raise ValueError("Amount must be positive")
+    if amount < 0:
+        raise ValueError("Amount must non-negative")
     buyer.balance -= amount
     seller.balance += amount
 
 
-def low_attractor(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
-    low_mean: float = (a.offer + (a.offer + b.offer) / 2.0) / 2.0
+def low_attractor(a: Asker, b: Bidder, *args: Buyer) -> bool:
+    low_mean: float = (a.offer + (a.offer + b.proposal) / 2.0) / 2.0
     flag: bool = True
 
     # se almeno un operatore ha un'offerta superiore ad up_mean allora ritorniamo false
@@ -155,11 +173,12 @@ def low_attractor(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
 
 
 def low_attractor_price(p_bid: float, lm: float, p_ask: float) -> float:
-    return LOW_ATTRACTOR[BIDDER_STRING]*p_bid + LOW_ATTRACTOR[OPERATOR_STRING]*lm + LOW_ATTRACTOR[ASKER_STRING]*p_ask
+    return LOW_ATTRACTOR[BIDDER_STRING] * p_bid + LOW_ATTRACTOR[OPERATOR_STRING] * lm + LOW_ATTRACTOR[
+        ASKER_STRING] * p_ask
 
 
-def high_attractor(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
-    up_mean: float = (b.offer + (a.offer + b.offer) / 2.0) / 2.0
+def high_attractor(a: Asker, b: Bidder, *args: Buyer) -> bool:
+    up_mean: float = (b.proposal + (a.offer + b.proposal) / 2.0) / 2.0
     flag: bool = True
 
     # se almeno un operatore ha un'offerta inferiore ad up_mean allora ritorniamo false
@@ -171,12 +190,13 @@ def high_attractor(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
 
 
 def high_attractor_price(p_bid: float, um: float, p_ask: float) -> float:
-    return HIGH_ATTRACTOR[BIDDER_STRING]*p_bid + HIGH_ATTRACTOR[OPERATOR_STRING]*um + HIGH_ATTRACTOR[ASKER_STRING]*p_ask
+    return HIGH_ATTRACTOR[BIDDER_STRING] * p_bid + HIGH_ATTRACTOR[OPERATOR_STRING] * um + HIGH_ATTRACTOR[
+        ASKER_STRING] * p_ask
 
 
-def central_attractor(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
-    up_mean: float = (b.offer + (a.offer + b.offer) / 2.0) / 2.0
-    low_mean: float = (a.offer + (a.offer + b.offer) / 2.0) / 2.0
+def central_attractor(a: Asker, b: Bidder, *args: Buyer) -> bool:
+    up_mean: float = (b.proposal + (a.offer + b.proposal) / 2.0) / 2.0
+    low_mean: float = (a.offer + (a.offer + b.proposal) / 2.0) / 2.0
     flag: bool = True
 
     # se almeno un operatore ha un'offerta non compresa tra low_mean e up_mean esclusi allora ritorniamo false
@@ -188,12 +208,13 @@ def central_attractor(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
 
 
 def central_attractor_price(p_bid: float, p_ask: float, p_ops_max: float):
-    return CENTRAL_ATTRACTOR[BIDDER_STRING]*p_bid + CENTRAL_ATTRACTOR[OPERATOR_STRING]*p_ops_max + CENTRAL_ATTRACTOR[
-        ASKER_STRING]*p_ask
+    return CENTRAL_ATTRACTOR[BIDDER_STRING] * p_bid + CENTRAL_ATTRACTOR[OPERATOR_STRING] * p_ops_max + \
+           CENTRAL_ATTRACTOR[
+               ASKER_STRING] * p_ask
 
 
-def low_concentration(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
-    up_mean: float = (b.offer + (a.offer + b.offer) / 2.0) / 2.0
+def low_concentration(a: Asker, b: Bidder, *args: Buyer) -> bool:
+    up_mean: float = (b.proposal + (a.offer + b.proposal) / 2.0) / 2.0
     flag: bool = False
     count: int = 0
 
@@ -209,13 +230,13 @@ def low_concentration(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
 
 
 def low_concentration_price(p_bid: float, p_ask: float):
-    p_ops = (2.0*p_ask + p_bid)/3.0
-    return LOW_CONCENTRATION[BIDDER_STRING]*p_bid + LOW_CONCENTRATION[OPERATOR_STRING]*p_ops + LOW_CONCENTRATION[
-        ASKER_STRING]*p_ask
+    p_ops = (2.0 * p_ask + p_bid) / 3.0
+    return LOW_CONCENTRATION[BIDDER_STRING] * p_bid + LOW_CONCENTRATION[OPERATOR_STRING] * p_ops + LOW_CONCENTRATION[
+        ASKER_STRING] * p_ask
 
 
-def high_concentration(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
-    low_mean: float = (a.offer + (a.offer + b.offer) / 2.0) / 2.0
+def high_concentration(a: Asker, b: Bidder, *args: Buyer) -> bool:
+    low_mean: float = (a.offer + (a.offer + b.proposal) / 2.0) / 2.0
     flag: bool = False
     count: int = 0
 
@@ -231,31 +252,32 @@ def high_concentration(a: Asker, b: Bidder, *args: NegotiationActor) -> bool:
 
 
 def high_concentration_price(p_bid: float, p_ask: float):
-    p_ops = (p_ask + 2.0*p_bid)/3.0
-    return HIGH_CONCENTRATION[BIDDER_STRING]*p_bid + HIGH_CONCENTRATION[OPERATOR_STRING]*p_ops + HIGH_CONCENTRATION[
-        ASKER_STRING]*p_ask
+    p_ops = (p_ask + 2.0 * p_bid) / 3.0
+    return HIGH_CONCENTRATION[BIDDER_STRING] * p_bid + HIGH_CONCENTRATION[OPERATOR_STRING] * p_ops + HIGH_CONCENTRATION[
+        ASKER_STRING] * p_ask
 
 
 def equilibrium_price(p_bid: float, p_ask: float, mean: float):
-    return EQUILIBRIUM[BIDDER_STRING]*p_bid + EQUILIBRIUM[OPERATOR_STRING]*mean + EQUILIBRIUM[ASKER_STRING]*p_ask
+    return EQUILIBRIUM[BIDDER_STRING] * p_bid + EQUILIBRIUM[OPERATOR_STRING] * mean + EQUILIBRIUM[ASKER_STRING] * p_ask
 
 
 # returns true iff the negotiation ends with the completion of the operation (selling of the goods/service)
-def negotiation(a: Asker, b: Bidder, *args: NegotiationActor) -> (bool, Optional[NegotiationActor]):
-    winner: Optional[NegotiationActor] = None
-    mean: float = (a.offer + b.offer) / 2.0
-    low_mean: float = (a.offer + (a.offer + b.offer) / 2.0) / 2.0
-    up_mean: float = (b.offer + (a.offer + b.offer) / 2.0) / 2.0
+def negotiation(a: Asker, b: Bidder, *args: Buyer) -> (bool, Optional[Buyer]):
+    winner: Optional[Buyer] = None
+    mean: float = (a.offer + b.proposal) / 2.0
+    low_mean: float = (a.offer + (a.offer + b.proposal) / 2.0) / 2.0
+    up_mean: float = (b.proposal + (a.offer + b.proposal) / 2.0) / 2.0
     success: bool = True  #
 
     if len(args) < 3:
         raise NotEnoughOperatorsError()
 
     if low_attractor(a, b, *args):
-        negotiation_price = low_attractor_price(b.offer, low_mean, a.offer)
+        negotiation_price = low_attractor_price(b.proposal, low_mean, a.offer)
         if a.formulating and b.acceptance:
             # a vince la negoziazione
             a.offer = negotiation_price
+            winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più vicina a low_mean
@@ -265,10 +287,11 @@ def negotiation(a: Asker, b: Bidder, *args: NegotiationActor) -> (bool, Optional
             success = False
 
     elif high_attractor(a, b, *args):
-        negotiation_price = high_attractor_price(b.offer, up_mean, a.offer)
+        negotiation_price = high_attractor_price(b.proposal, up_mean, a.offer)
         if a.formulating and b.acceptance:
             # a vince la negoziazione
             a.offer = negotiation_price
+            winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più vicina al prezzo proposto da b
@@ -280,10 +303,11 @@ def negotiation(a: Asker, b: Bidder, *args: NegotiationActor) -> (bool, Optional
     elif central_attractor(a, b, *args):
         # calcoliamo il miglior miglior offerente tra gli operatori
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
-        negotiation_price = central_attractor_price(b.offer, a.offer, best_offerer)
+        negotiation_price = central_attractor_price(b.proposal, a.offer, best_offerer)
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari al negotiation_price
             a.offer = negotiation_price
+            winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più vicina a negotiation_price
@@ -293,11 +317,12 @@ def negotiation(a: Asker, b: Bidder, *args: NegotiationActor) -> (bool, Optional
             success = False
 
     elif low_concentration(a, b, *args):
-        negotiation_price = low_concentration_price(b.offer, a.offer)
+        negotiation_price = low_concentration_price(b.proposal, a.offer)
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari a price
             a.offer = negotiation_price
+            winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più alta
@@ -308,11 +333,12 @@ def negotiation(a: Asker, b: Bidder, *args: NegotiationActor) -> (bool, Optional
             success = False
 
     elif high_concentration(a, b, *args):
-        negotiation_price = high_concentration_price(b.offer, a.offer)
+        negotiation_price = high_concentration_price(b.proposal, a.offer)
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari a price
             a.offer = negotiation_price
+            winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più alta
@@ -323,11 +349,12 @@ def negotiation(a: Asker, b: Bidder, *args: NegotiationActor) -> (bool, Optional
             success = False
 
     else:  # situazione di equilibrio
-        negotiation_price = equilibrium_price(b.offer, a.offer, mean)
+        negotiation_price = equilibrium_price(b.proposal, a.offer, mean)
         best_offerer = max(*args, key=lambda operator: abs(operator.offer))
         if a.formulating and b.acceptance:
             # a vince la negoziazione per il diritto di prelazione facendo un'offerta pari a price
             a.offer = negotiation_price
+            winner = a
             transaction(a, b, amount=a.offer)
         elif (not a.formulating) and b.acceptance:
             # troviamo l'operator con l'offerta più alta

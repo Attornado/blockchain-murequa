@@ -197,10 +197,10 @@
           $.ajax({
             url: "/mine",
             type: "GET",
+            dataType: "json",
             success: function(response){
-
+              alert("The winner was: '" + response.winner + "' you " + (response.won?"won":"didn't win"))
               window.location.reload();
-              
             },
             error: function(error){
               console.log(error);
