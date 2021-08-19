@@ -79,7 +79,7 @@ def configure():
     else:
         return 'Blockchain not initialized yet.', 400
 
-
+'''
 @app.route('/transactions/broadcast', methods=["POST"])
 def broadcast_transaction():
     """
@@ -118,6 +118,7 @@ def broadcast_transaction():
     else:
         response = {'message': 'Blockchain hasn\'t been initialized yet!'}
         return jsonify(response), 400
+'''
 
 
 @app.route('/transactions/new_pending', methods=['POST'])
@@ -139,9 +140,16 @@ def new_pending_transaction():
         # Send in broadcast to all neighbours
         if transaction_added:
             for node in blockchain.nodes:
+                data = {
+                    'sender_address': values['sender_address'],
+                    'recipient_address': values['recipient_address'],
+                    'amount': values['amount'],
+                    'signature': values['signature'],
+                    'timestamp' : values['timestamp']
+                }
                 print(node + '/transactions/new_pending')
                 try:
-                    response_broadcast = requests.get(node + '/transactions/new_pending')
+                    response_broadcast = requests.post(node + '/transactions/new_pending', data=data)
                 except requests.exceptions.RequestException:
                     print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
                     continue  # skip the current iteration if we can't connect with the node
@@ -157,14 +165,14 @@ def new_pending_transaction():
         response = {'message': 'Blockchain hasn\'t been initialized yet!'}
         return jsonify(response), 400
 
-
+'''
 @app.route('/transactions/new', methods=['POST'])
 def new_transaction():
     if blockchain is not None:
         values = request.form
 
         # Check that the required fields are in the POST data
-        required = ['sender_address', 'recipient_address', 'amount', 'signature', 'timestamp']
+        required = ['sender_address', 'recipient_address', 'amount', 'signature']
         if not all(k in values for k in required):
             return 'Missing values', 400
         # Create a new Transaction
@@ -182,7 +190,7 @@ def new_transaction():
     else:
         response = {'message': 'Blockchain hasn\'t been initialized yet!'}
         return jsonify(response), 400
-
+'''
 
 @app.route('/transactions/get', methods=['GET'])
 def get_transactions():

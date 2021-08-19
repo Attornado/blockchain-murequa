@@ -36,6 +36,7 @@ from pytreemap import TreeMap
 import jsonpickle as jspkl
 
 import requests
+import threading
 
 import negotiation.negotiation as ng
 import node as nd
@@ -59,6 +60,7 @@ MIN_OPERATOR: final = 0
 MAX_OPERATOR: final = 1
 SYNC_TIME: final = 1.0
 
+
 class Blockchain:
 
     def __init__(self, public_key: str):
@@ -74,8 +76,7 @@ class Blockchain:
             "validator": None,  # Last block validator address, used in verifications
             "block_number": 0
         }
-
-        # TODO: replace with the node blockchain address
+        self.lock = threading.Lock()  # Lock to be acquired when calling proof_of_negotiation()
         self.node_id = public_key  # Main blockchain address of the node
 
         # Create genesis block
@@ -210,7 +211,7 @@ class Blockchain:
         COINBASE for the basic mining reward, and an implicit transaction from the winner to the last block validator.
 
         :param node_address: the blockchain address of the node to calculate the balance
-        :return: the balance of the node
+        :return: the balance of the given node.
         """
         # This will be implemented with Merkel Trees in the future
         balance = 0
@@ -234,10 +235,11 @@ class Blockchain:
                     balance -= transaction['value']
         return balance
 
-    def verify_transaction_signature(self, sender_address, signature, transaction):
+    def verify_transaction_signature(self, sender_address, signature, transaction) -> bool:
         """
         Check that the provided signature corresponds to transaction
         signed by the public key (sender_address)
+
         """
         public_key = RSA.importKey(binascii.unhexlify(sender_address))
         verifier = PKCS1_v1_5.new(public_key)
@@ -258,7 +260,7 @@ class Blockchain:
         transaction = OrderedDict({
             'sender_address': sender_address,
             'recipient_address': recipient_address,
-            'value': value,
+            'value': float(value),
             'timestamp': timestamp,
             'signature': signature
         })
@@ -276,7 +278,7 @@ class Blockchain:
             'sender_address': sender_address,
             'recipient_address': recipient_address,
             'timestamp': timestamp,
-            'value': value
+            'value': float(value)
         })
 
         # Reward for mining a block
@@ -324,7 +326,7 @@ class Blockchain:
                  'validator': validator_address,  # address of the validator
                  'negotiation_price': negotiation_price,  # the selling price of the validation right
                  'previous_hash': previous_hash
-        }
+                 }
 
         # Reset the current list of transactions
         self.transactions = []
@@ -332,9 +334,12 @@ class Blockchain:
         self.chain.append(block)
         return block
 
-    def hash(self, block):
+    def hash(self, block) -> str:
         """
-        Create a SHA-256 hash of a block
+        Creates a SHA-256 hash of a block.
+
+        :param block: the block to create the SHA-256 hash value of;
+        :return: the SHA-256 hash value of the given block.
         """
         # We must make sure that the Dictionary is Ordered, or we'll have inconsistent hashes
         block_string = json.dumps(block, sort_keys=True).encode()
@@ -344,14 +349,21 @@ class Blockchain:
     @staticmethod
     def transaction_key(transaction) -> str:
         """
-        Computes the key of a transaction, composed by the sender, receiver and timestamp, separated by ','
+        Computes the key of a transaction, composed by the sender, receiver and timestamp, separated by ','.
+
+        :param transaction: the transaction to compute the key of;
+        :return: the transaction key composed by the sender, receiver and timestamp, separated by ','.
         """
         k = transaction['sender_address'] + ',' + transaction['recipient_address'] + ',' + str(transaction['timestamp'])
         return k
 
-    def valid_chain(self, chain):
+    def valid_chain(self, chain) -> bool:
         """
-        check if a blockchain is valid
+        Checks if the given blockchain is valid.
+
+        :param chain: the blockchain to check the validity of;
+        :return: True if the blockchain is valid, meaning that each block "previous_hash" field is coherent with the
+                 previous block SHA-256 hash value, False otherwise.
         """
         last_block = chain[0]
         current_index = 1
@@ -366,7 +378,6 @@ class Blockchain:
                 return False
 
             # TODO: add control on block validator (maybe with beacon nodes)
-            #  request to verify the validator existence and reputation
 
             last_block = block
             current_index += 1
@@ -421,7 +432,8 @@ class Blockchain:
         if new_chain:
             self.chain = new_chain
             validator_address = self.chain[-1]["validator"]
-            self.candidates = TreeMap()  # Delete all current candidates if they exist
+            with self.lock:  # Synchronization to avoid to empty candidate map during negotiation
+                self.candidates = TreeMap()  # Delete all current candidates if they exist
             self.change_reputation(
                 node_address=validator_address,
                 change_lvl=VALIDATION_MERIT,
@@ -437,8 +449,9 @@ class Blockchain:
         neighbours = self.nodes
 
         # For each node, send request to get the candidate list from the node and add it to the dictionary,
-        # if their reputation is higher than the minimum, and if their balance is higher than the minimum,
-        # in other words, if their balance + the base reward from COINBASE is higher than the previous block cost
+        # if their reputation is higher than the minimum, and if they are not the last block validator, and if their
+        # balance is higher than the minimum, in other words, if their balance + the base reward from COINBASE is
+        # higher than the previous block cost
         for node_url in neighbours:
             if neighbours[node_url].reputation >= MINIMUM_REPUTATION:
                 print('Requesting ' + node_url + '/candidates')
@@ -471,7 +484,8 @@ class Blockchain:
 
                     # Select the candidate only if their balance is enough (last block cost + MINING_REWARD)
                     if self.get_node_balance(candidate.address) + MINING_REWARD > self.chain[-1]["negotiation_price"]:
-                        new_candidates.update({candidate_url: candidate})
+                        if candidate.address != self.chain[-1]["validator"]:  # Last validator cannot be candidate
+                            new_candidates.update({candidate_url: candidate})
 
         return new_candidates
 
@@ -485,113 +499,110 @@ class Blockchain:
 
         :return: The winner node and the negotiation price payed by it to get the validation right.
         """
-        print("Getting valid chain...")
-        if self.resolve_conflicts():
-            print('Our chain was replaced.')
-        else:
-            print('Our chain is authoritative.')
+        with self.lock:
+            print("Getting valid chain...")
+            if self.resolve_conflicts():
+                print('Our chain was replaced.')
+            else:
+                print('Our chain is authoritative.')
 
-        # Set the RNG seed to according to the last block,
-        # to make sure that the numbers generated by the nodes are the same
-        random.seed(self.chain[-1]['random_factor'])
+            # Set the RNG seed to according to the last block,
+            # to make sure that the numbers generated by the nodes are the same
+            random.seed(self.chain[-1]['random_factor'])
 
-        # Get the candidates from the other nodes and add ourself to them (our ip), represented by the MYSELF_STRING
-        # As for our reputation, we can easily put a default value here, since the neighbour nodes will replace it with
-        # our real reputation
-        self.candidates[nd.MYSELF_STRING] = nd.Node(
-            url=nd.MYSELF_STRING,
-            reputation=DEFAULT_REPUTATION,
-            address=self.node_id
-        )
+            # Get the candidates from the other nodes and add ourself to them (our ip), represented by the MYSELF_STRING
+            # As for our reputation, we can easily put a default value here, since the neighbour nodes will replace it
+            # with our real reputation
+            self.candidates[nd.MYSELF_STRING] = nd.Node(
+                url=nd.MYSELF_STRING,
+                reputation=DEFAULT_REPUTATION,
+                address=self.node_id
+            )
 
-        # Insert the new candidates obtained from neighbours into our candidates, until we have at least 4 candidates
-        new_candidates = {}
-        while len(self.candidates) - 1 < REAL_CANDIDATES_NUMBER:
+            # Insert the new candidates obtained from neighbours into ours, until we have at least 4 candidates
+            new_candidates = {}
+            while len(self.candidates) - 1 < REAL_CANDIDATES_NUMBER:
+                new_candidates = self.get_candidates_from_nodes()
+                for candidate_url in new_candidates:
+                    self.candidates.put(candidate_url, new_candidates[candidate_url])
+
+            for node in self.nodes:
+                print('Requesting' + node + '/update_candidates')
+                try:
+                    requests.get(node + '/update_candidates')
+                except requests.exceptions.RequestException:
+                    print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
+
+            # Wait some time to make sure all nodes received the message and update candidates one last time
+            tm.sleep(SYNC_TIME)
             new_candidates = self.get_candidates_from_nodes()
             for candidate_url in new_candidates:
                 self.candidates.put(candidate_url, new_candidates[candidate_url])
 
-        # TOCHECK: force the neighbours to update their candidates
-        for node in self.nodes:
-            print('Requesting' + node + '/update_candidates')
-            try:
-                requests.get(node + '/update_candidates')
-            except requests.exceptions.RequestException:
-                print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
+            # Delete MYSELF_STRING candidate from the candidates, neighbours will add ourself to the candidates
+            del self.candidates[nd.MYSELF_STRING]
 
-        # Wait some time to make sure all nodes received the message and update candidates one last time
-        tm.sleep(SYNC_TIME)
-        new_candidates = self.get_candidates_from_nodes()
-        for candidate_url in new_candidates:
-            self.candidates.put(candidate_url, new_candidates[candidate_url])
+            # Choose the effective candidates
+            chosen_candidates = self.__choose_candidates()
 
-        # If present, remove the validator of the last block from the candidates
-        for candidate_url in self.candidates:
-            if self.candidates[candidate_url].address == self.chain[-1]["validator"]:
-                del self.candidates[candidate_url]
+            # Choose an Asker candidate between them and remove it from the operator list
+            asker_candidate = self.__choose_asker(chosen_candidates)
 
-        # Delete MYSELF_STRING candidate from the candidates, neighbours will add ourself to the candidates
-        del self.candidates[nd.MYSELF_STRING]
+            # If this is the first block after the genesis we must handle the validator selection different,
+            # choosing the asker as the winner of the validation right
+            if self.chain[-1]["validator"] is None:
+                # Set the pending validator attribute and return the validator, negotiation_price couple
+                self.pending_winner["validator"] = asker_candidate.address
+                self.pending_winner["block_number"] = len(self.chain) + 1
+                self.candidates = TreeMap()
+                return asker_candidate, 0
 
-        # Choose the effective candidates
-        chosen_candidates = self.__choose_candidates()
-
-        # Choose an Asker candidate between them and remove it from the operator list
-        asker_candidate = self.__choose_asker(chosen_candidates)
-
-        # If this is the first block after the genesis we must handle the validator selection different, choosing the
-        # asker as the winner of the validation right
-        if self.chain[-1]["validator"] is None:
-            # Set the pending validator attribute and return the validator, negotiation_price couple
-            self.pending_winner["validator"] = asker_candidate.address
-            self.pending_winner["block_number"] = len(self.chain) + 1
-            self.candidates = TreeMap()
-            return asker_candidate, 0
-
-        # Create the Asker (the 'formulating' or not the offer attribute is a random boolean, as described in the paper)
-        asker: ng.Asker = ng.Asker(
-            identifier=asker_candidate.address,
-            balance=self.get_node_balance(asker_candidate.url),
-            formulating=bool(random.randint(0, 1))
-        )
-        asker.offer = asker.generate_offer(minimum=max(self.chain[-1]['negotiation_price'] - MINING_REWARD, 0))
-
-        # Create the Bidder (the 'acceptance' attribute is True regardless of all, as described in the paper)
-        # The proposed price from the bidder will be, as for now, the base plus a random float value between some bounds
-        bidder: ng.Bidder = ng.Bidder(
-            identifier=self.chain[-1]["validator"],
-            proposal=random.uniform(MIN_GAIN, MAX_GAIN),
-            balance=self.get_node_balance(self.chain[-1]["validator"]),
-            acceptance=True
-        )
-
-        # Create the operators
-        operators = []
-        # As for now, the operator offer will be minimum plus a small random float
-        for candidate_url in self.candidates:
-            balance = self.get_node_balance(self.candidates[candidate_url].url)
-            operator = ng.Buyer(
-                identifier=self.candidates[candidate_url].address,
-                offer=min(balance, random.uniform(MIN_OPERATOR, MAX_OPERATOR)),
-                balance=balance
+            # Create the Asker (the 'formulating' or not the offer attribute is a random boolean, as described in the
+            # paper)
+            asker: ng.Asker = ng.Asker(
+                identifier=asker_candidate.address,
+                balance=self.get_node_balance(asker_candidate.address),
+                formulating=bool(random.randint(0, 1))
             )
-            operators.append(operator)
+            asker.offer = asker.generate_offer(minimum=max(self.chain[-1]['negotiation_price'] - MINING_REWARD, 0))
 
-        # Get a winner using the negotiation algorithm, and the corresponding Node object
-        success, winner_actor = ng.negotiation(asker, bidder, *operators)
-        negotiation_price: float = winner_actor.offer
-        winner: Optional[nd.Node] = None
-        for candidate_url in self.candidates:
-            if self.candidates[candidate_url].address == winner_actor.identifier:
-                winner = self.candidates[candidate_url]
+            # Create the Bidder (the 'acceptance' attribute is True regardless of all, as described in the paper)
+            # The proposed price from the bidder will be, as for now, the base plus a random float value between some
+            # bounds
+            bidder: ng.Bidder = ng.Bidder(
+                identifier=self.chain[-1]["validator"],
+                proposal=random.uniform(MIN_GAIN, MAX_GAIN),
+                balance=self.get_node_balance(self.chain[-1]["validator"]),
+                acceptance=True
+            )
 
-        # Empty the candidate dictionary
-        self.candidates = TreeMap()
+            # Create the operators
+            operators = []
+            # As for now, the operator offer will be minimum plus a small random float
+            for candidate_url in self.candidates:
+                balance = self.get_node_balance(self.candidates[candidate_url].address)
+                operator = ng.Buyer(
+                    identifier=self.candidates[candidate_url].address,
+                    offer=min(balance, random.uniform(MIN_OPERATOR, MAX_OPERATOR)),
+                    balance=balance
+                )
+                operators.append(operator)
 
-        # Set the pending validator attribute and return the validator, negotiation_price couple
-        self.pending_winner["validator"] = winner.address
-        self.pending_winner["block_number"] = len(self.chain) + 1
-        return winner, negotiation_price
+            # Get a winner using the negotiation algorithm, and the corresponding Node object
+            success, winner_actor = ng.negotiation(asker, bidder, *operators)
+            negotiation_price: float = winner_actor.offer
+            winner: Optional[nd.Node] = None
+            for candidate_url in self.candidates:
+                if self.candidates[candidate_url].address == winner_actor.identifier:
+                    winner = self.candidates[candidate_url]
+
+            # Empty the candidate dictionary
+            self.candidates = TreeMap()
+
+            # Set the pending validator attribute and return the validator, negotiation_price couple
+            self.pending_winner["validator"] = winner.address
+            self.pending_winner["block_number"] = len(self.chain) + 1
+            return winner, negotiation_price
 
     def __choose_candidates(self) -> OrderedDict:
         # Select the effective candidates, by a reputation-weighted roulette wheel algorithm

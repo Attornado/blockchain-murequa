@@ -150,11 +150,18 @@
                 </div>
 
                 <div class="row">
-                  <label class="col-sm-12">Transaction Signature:</label>
+                  <label for="transaction_signature" class="col-sm-12">Transaction Signature:</label>
                   <div class="col-sm-12">
                     <input type="text" name="signature" id="transaction_signature" rows="2" class="form-control" readonly>
                   </div>
                 </div>
+
+              <div class="row">
+                <label for="transaction_timestamp" class="col-sm-12">Transaction timestamp:</label>
+                <div class="col-sm-12">
+                  <input type="text" name="timestamp" id="transaction_timestamp" rows="2" class="form-control" readonly>
+                </div>
+              </div>
 
             </form>
 
@@ -226,7 +233,7 @@
                 document.getElementById("confirmation_recipient_address").value = response["transaction"]["recipient_address"];
                 document.getElementById("confirmation_amount").value = response["transaction"]["value"];
                 document.getElementById("transaction_signature").value = response["signature"];
-
+                document.getElementById("transaction_timestamp").value = response["transaction"]["timestamp"];
                 $("#basicModal").modal('show');
                 
               },
@@ -245,7 +252,7 @@
 
 
             $.ajax({
-              url: document.getElementById("node_url").value + "/transactions/new",
+              url: document.getElementById("node_url").value + "/transactions/new_pending",
               type: "POST",
               headers: {'Access-Control-Allow-Origin':'*'},
               dataType : 'json',
