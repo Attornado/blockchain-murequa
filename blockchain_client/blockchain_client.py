@@ -37,16 +37,18 @@ class Transaction:
         self.sender_private_key = sender_private_key
         self.recipient_address = recipient_address
         self.timestamp = timestamp
-        self.value = value
+        self.value = float(value)
 
     def __getattr__(self, attr):
         return self.data[attr]
 
     def to_dict(self):
-        return OrderedDict({'sender_address': self.sender_address,
-                            'recipient_address': self.recipient_address,
-                            'value': self.value,
-                            'timestamp': self.timestamp})
+        return OrderedDict({
+            'sender_address': self.sender_address,
+            'recipient_address': self.recipient_address,
+            'timestamp': self.timestamp,
+            'value': self.value
+        })
 
     def sign_transaction(self):
         """
@@ -94,7 +96,7 @@ def generate_transaction():
     sender_address = request.form['sender_address']
     sender_private_key = request.form['sender_private_key']
     recipient_address = request.form['recipient_address']
-    value = request.form['amount']
+    value = float(request.form['amount'])
 
     transaction = Transaction(sender_address, sender_private_key, recipient_address, value)
 
