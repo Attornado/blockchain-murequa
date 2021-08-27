@@ -30,18 +30,19 @@ import requests
 from flask import Flask, jsonify, request, render_template
 
 
-class Transaction:
+class Transaction(object):
 
-    def __init__(self, sender_address, sender_private_key, recipient_address, value, timestamp=time()):
+    def __init__(self, sender_address, sender_private_key, recipient_address, value, timestamp: float=time()):
         self.sender_address = sender_address
         self.sender_private_key = sender_private_key
         self.recipient_address = recipient_address
-        self.timestamp = timestamp
+        self.timestamp: float = timestamp
         self.value = float(value)
 
+    '''
     def __getattr__(self, attr):
         return self.data[attr]
-
+    '''
     def to_dict(self):
         return OrderedDict({
             'sender_address': self.sender_address,
