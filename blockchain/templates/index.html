@@ -113,7 +113,7 @@
               var transactions = [];
               count = 1;
 
-              for (i = 0; i < response['transactions'].length; i++) { 
+              for (let i = 0; i < response['transactions'].length; i++) {
 
                 transaction = [count,
                               response['transactions'][i]["recipient_address"],
@@ -123,7 +123,7 @@
                   transactions.push(transaction);
 
                   count += 1;
-              };
+              }
 
             // Restrict a column to 10 characters, do split words
               $('#unmined_transactions_table').dataTable( {
@@ -153,13 +153,13 @@
             var transactions = [];
             count = 1;
 
-            for (i = 1; i < response.length; i++) { 
-              for (j = 0; j < response["chain"][i]["transactions"].length; j++) {
+            for (let i = 1; i < response.length; i++) {
+              for (let j = 0; j < response["chain"][i]["transactions"].length; j++) {
 
                 //format date 
-                var options = {  year: "numeric", month: "short",  day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"  };
-                var date = new Date(response["chain"][i]["timestamp"] * 1000);
-                var formattedDateTime = date.toLocaleTimeString("en-us", options);
+                let options = {  year: "numeric", month: "short",  day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"  };
+                let date = new Date(response["chain"][i]["timestamp"] * 1000);
+                let formattedDateTime = date.toLocaleTimeString("en-us", options);
 
                 transaction = [count,
                               response["chain"][i]["transactions"][j]["recipient_address"],
@@ -170,8 +170,8 @@
                 transactions.push(transaction);
 
                 count += 1;
-              };
-            };
+              }
+            }
 
             // Restrict a column to 10 characters, do split words
               $('#transactions_table').dataTable( {

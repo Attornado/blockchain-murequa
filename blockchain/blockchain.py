@@ -277,7 +277,7 @@ class Blockchain:
         transaction = OrderedDict({
             'sender_address': sender_address,
             'recipient_address': recipient_address,
-            'timestamp': timestamp,
+            'timestamp': float(timestamp),
             'value': float(value)
         })
 
@@ -330,6 +330,7 @@ class Blockchain:
 
         # Reset the current list of transactions
         self.transactions = []
+        self.pending_transactions = {}
 
         self.chain.append(block)
         return block
@@ -431,9 +432,18 @@ class Blockchain:
         # notifies his neighbours of the validation)
         if new_chain:
             self.chain = new_chain
-            validator_address = self.chain[-1]["validator"]
+
             with self.lock:  # Synchronization to avoid to empty candidate map during negotiation
                 self.candidates = TreeMap()  # Delete all current candidates if they exist
+
+            # Remove duplicated transactions, already validated
+            validated_transactions = self.chain[-1]["transactions"]
+            for transaction in validated_transactions:
+                if Blockchain.transaction_key(transaction) in self.pending_transactions:
+                    del self.pending_transactions[Blockchain.transaction_key(transaction)]
+
+            # Increase the reputation of the validator
+            validator_address = self.chain[-1]["validator"]
             self.change_reputation(
                 node_address=validator_address,
                 change_lvl=VALIDATION_MERIT,

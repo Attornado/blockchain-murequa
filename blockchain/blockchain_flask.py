@@ -79,47 +79,6 @@ def configure():
     else:
         return 'Blockchain not initialized yet.', 400
 
-'''
-@app.route('/transactions/broadcast', methods=["POST"])
-def broadcast_transaction():
-    """
-    Sends a new transaction in broadcast
-    """
-    if blockchain is not None:
-        values = request.form
-
-        # Check that the required fields are in the POST data
-        required = ['sender_address', 'recipient_address', 'amount', 'signature', 'timestamp']
-        if not all(k in values for k in required):
-            return 'Missing values', 400
-
-        # Create a new Transaction
-        transaction_added = blockchain.add_pending_transaction(
-            values['sender_address'], values['recipient_address'], values['amount'],
-            values['signature'], values['timestamp']
-        )
-
-        if transaction_added:
-            for node in blockchain.nodes:
-                print(node + '/transactions/new_pending')
-                try:
-                    response_broadcast = requests.get(node + '/transactions/new_pending')
-                except requests.exceptions.RequestException:
-                    print("Node with url '" + node + "' isn't connected or doesn't exist anymore.")
-                    continue  # skip the current iteration if we can't connect with the node
-
-                if response_broadcast.status_code == 200:
-                    print(node + '/transactions/new_pending completed successfully')
-                else:
-                    print(node + '/transactions/new_pending failed')
-
-        response = {'message': 'Transaction broadcast completed'}
-        return jsonify(response), 200
-    else:
-        response = {'message': 'Blockchain hasn\'t been initialized yet!'}
-        return jsonify(response), 400
-'''
-
 
 @app.route('/transactions/new_pending', methods=['POST'])
 def new_pending_transaction():
@@ -133,8 +92,8 @@ def new_pending_transaction():
 
         # Create a new Transaction
         transaction_added = blockchain.add_pending_transaction(
-            values['sender_address'], values['recipient_address'], values['amount'],
-            values['signature'], values['timestamp']
+            values['sender_address'], values['recipient_address'], float(values['amount']),
+            values['signature'], float(values['timestamp'])
         )
 
         # Send in broadcast to all neighbours
@@ -165,38 +124,12 @@ def new_pending_transaction():
         response = {'message': 'Blockchain hasn\'t been initialized yet!'}
         return jsonify(response), 400
 
-'''
-@app.route('/transactions/new', methods=['POST'])
-def new_transaction():
-    if blockchain is not None:
-        values = request.form
-
-        # Check that the required fields are in the POST data
-        required = ['sender_address', 'recipient_address', 'amount', 'signature']
-        if not all(k in values for k in required):
-            return 'Missing values', 400
-        # Create a new Transaction
-        transaction_result = blockchain.submit_transaction(
-            values['sender_address'], values['recipient_address'], values['amount'],
-            values['signature'], values['timestamp']
-        )
-
-        if not transaction_result:
-            response = {'message': 'Invalid Transaction!'}
-            return jsonify(response), 406
-        else:
-            response = {'message': 'Transaction will be added to Block ' + str(transaction_result)}
-            return jsonify(response), 201
-    else:
-        response = {'message': 'Blockchain hasn\'t been initialized yet!'}
-        return jsonify(response), 400
-'''
 
 @app.route('/transactions/get', methods=['GET'])
 def get_transactions():
     if blockchain is not None:
         # Get transactions from transactions pool
-        transactions = blockchain.transactions
+        transactions = blockchain.pending_transactions
 
         response = {'transactions': transactions}
         return jsonify(response), 200
