@@ -119,6 +119,7 @@ class Blockchain:
         """
         reputation: float = -1
         request_id: str = str(self.node_id) + str(time()) + "RS"
+        reputations = {}  # Dictionary to check the most frequent reputation, granting Byzantine Fault Tolerance
 
         for neighbour_url in self.nodes:
             try:
@@ -130,9 +131,9 @@ class Blockchain:
             except requests.exceptions.RequestException:
                 print("Node with url '" + neighbour_url + "' isn't connected or doesn't exist anymore.")
 
-            # Stop the broadcasting if we find the reputation
+            # If we find the reputation, add it to the reputations frequencies count
             if reputation != -1:
-                break
+                reputations[reputations] = 1 if (reputation not in reputations) else reputations[reputations] + 1
 
         if reputation == -1:
             self.reputation_requests[request_id] = request_id
@@ -146,9 +147,17 @@ class Blockchain:
                 except requests.exceptions.RequestException:
                     print("Node with url '" + neighbour_url + "' isn't connected or doesn't exist anymore.")
 
-                # Stop the broadcasting if we find the reputation
+                # If we find the reputation, add it to the reputations frequencies count
                 if reputation != -1:
-                    break
+                    reputations[reputations] = 1 if (reputation not in reputations) else reputations[reputations] + 1
+
+        # Check for the most frequent reputation
+        if reputation != -1:
+            max_frequency = -1
+            for current_rep in reputations:
+                if reputations[current_rep] > max_frequency:
+                    max_frequency = reputations[current_rep]
+                    reputation = current_rep
 
         # If the node is not found (reputation is -1), then it either doesn't exist, or it's a node new to the network,
         # so we set his reputation to 1, the default value
