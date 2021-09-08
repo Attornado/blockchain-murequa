@@ -133,7 +133,7 @@ class Blockchain:
 
             # If we find the reputation, add it to the reputations frequencies count
             if reputation != -1:
-                reputations[reputations] = 1 if (reputation not in reputations) else reputations[reputations] + 1
+                reputations[reputation] = 1 if (reputation not in reputations) else reputations[reputation] + 1
 
         if reputation == -1:
             self.reputation_requests[request_id] = request_id
@@ -149,7 +149,7 @@ class Blockchain:
 
                 # If we find the reputation, add it to the reputations frequencies count
                 if reputation != -1:
-                    reputations[reputations] = 1 if (reputation not in reputations) else reputations[reputations] + 1
+                    reputations[reputation] = 1 if (reputation not in reputations) else reputations[reputation] + 1
 
         # Check for the most frequent reputation
         if reputation != -1:
