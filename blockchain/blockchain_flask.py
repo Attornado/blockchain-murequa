@@ -12,7 +12,7 @@ import binascii
 import Crypto
 import Crypto.Random
 from Crypto.PublicKey import RSA
-from blockchain import Blockchain, MINING_SENDER, MINING_REWARD, REPUTATION_PENALTY, FALSE_SIGNATURE_GRAVITY, \
+from blockchain import Blockchain, MINING_SENDER, MINING_REWARD, REPUTATION_CHANGE, FALSE_SIGNATURE_GRAVITY, \
     VALIDATION_MERIT, INVALID_CHAIN_GRAVITY
 
 import node as nd
@@ -272,8 +272,8 @@ def change_reputation():
             # Diminish the reputation of the address if it is our neighbour
             if node_address in blockchain.addresses:
                 node_url = blockchain.addresses[node_address]
-                if blockchain.nodes[node_url].reputation + change_lvl * REPUTATION_PENALTY >= 0:
-                    blockchain.nodes[node_url].reputation += change_lvl * REPUTATION_PENALTY
+                if blockchain.nodes[node_url].reputation + change_lvl * REPUTATION_CHANGE >= 0:
+                    blockchain.nodes[node_url].reputation += change_lvl * REPUTATION_CHANGE
                 else:
                     blockchain.nodes[node_url].reputation = 0
 
