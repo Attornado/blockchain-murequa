@@ -47,7 +47,7 @@ MINING_REWARD: final = 1
 MINING_DIFFICULTY: final = 2
 INITIAL_SEED: final = 2458912
 MAX_SEED: final = 2000000
-REPUTATION_PENALTY: final = 0.2
+REPUTATION_CHANGE: final = 0.2
 INSUFFICIENT_BALANCE_GRAVITY: final = -1
 FALSE_SIGNATURE_GRAVITY: final = -3
 INVALID_CHAIN_GRAVITY: final = -2
@@ -194,8 +194,8 @@ class Blockchain:
             if node_address in self.addresses:
                 node_url = self.addresses[node_address]
 
-                if self.nodes[node_url].reputation + change_lvl * REPUTATION_PENALTY >= 0:
-                    self.nodes[node_url].reputation += change_lvl * REPUTATION_PENALTY
+                if self.nodes[node_url].reputation + change_lvl * REPUTATION_CHANGE >= 0:
+                    self.nodes[node_url].reputation += change_lvl * REPUTATION_CHANGE
                 else:
                     self.nodes[node_url].reputation = 0
 
@@ -500,6 +500,9 @@ class Blockchain:
                         candidate.reputation = self.nodes[candidate_url].reputation
                         candidate.address = self.nodes[candidate_url].address
                         candidate.url = self.nodes[candidate_url].url
+                    else:
+                        # Overwrite their reputation to prevent false reputations
+                        candidate.reputation = self.search_node_reputation(candidate_url)
 
                     # Select the candidate only if their balance is enough (last block cost + MINING_REWARD)
                     if self.get_node_balance(candidate.address) + MINING_REWARD > self.chain[-1]["negotiation_price"]:
