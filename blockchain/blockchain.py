@@ -215,7 +215,7 @@ class Blockchain:
 
     def get_node_balance(self, node_address) -> float:
         """
-        Returns the balance of the node with the given url, by using the blockchain transaction history.
+        Returns the balance of the node with the given address, by using the blockchain transaction history.
         As for negotiation winner rewards (aka block validators), there are both an explicit transaction from the
         COINBASE for the basic mining reward, and an implicit transaction from the winner to the last block validator.
 
